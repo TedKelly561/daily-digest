@@ -1,1 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0f7a5c"/><text x="16" y="21.5" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="14" fill="#fff">TK</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="chrome" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#cfd8dc"/><stop offset="1" stop-color="#8fa3ad"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#22d3ee" stroke-width="2.4" stroke-linecap="round" fill="none">
+    <path d="M22 14V6M32 14V4M42 14V6M22 50v8M32 50v10M42 50v8M14 26H5M14 38H5M50 26h9M50 38h9"/>
+  </g>
+  <g fill="#22d3ee"><circle cx="22" cy="5.5" r="2.2"/><circle cx="42" cy="5.5" r="2.2"/><circle cx="22" cy="58.5" r="2.2"/><circle cx="42" cy="58.5" r="2.2"/><circle cx="4.5" cy="26" r="2.2"/><circle cx="59.5" cy="38" r="2.2"/></g>
+  <rect x="14" y="14" width="36" height="36" rx="8" fill="#0b1a24" stroke="#22d3ee" stroke-width="3"/>
+  <text x="32" y="39.5" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="17" fill="url(#chrome)" letter-spacing="-.5">TK</text>
+  <circle cx="47" cy="17" r="3.4" fill="#ff8a1f"/>
+</svg>
