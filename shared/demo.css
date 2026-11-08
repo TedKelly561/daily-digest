@@ -1,0 +1,76 @@
+/* Shared look for the Service Business Toolkit demos. Matches tedkelly.dev. */
+:root {
+  --bg: #f6f7f4;
+  --bg-2: #eceee8;
+  --card: #ffffff;
+  --ink: #15201b;
+  --ink-soft: #55605b;
+  --line: #d9ddd5;
+  --accent: #0f7a5c;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcefe7;
+  --warn: #9a6400;
+  --warn-soft: #f6ead0;
+  --bad: #b42318;
+  --bad-soft: #fbe4e1;
+  --good: #0f7a5c;
+  --good-soft: #dcefe7;
+  --radius: 14px;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --display: 'Space Grotesk', var(--sans);
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1513; --bg-2: #141c19; --card: #18221e; --ink: #e6ece8; --ink-soft: #9aa7a1;
+    --line: #2a3631; --accent: #3ccf9e; --accent-ink: #06120d; --accent-soft: #163a2e;
+    --warn: #f0b54a; --warn-soft: #3a2c10; --bad: #ff8a7a; --bad-soft: #3d1a16;
+    --good: #3ccf9e; --good-soft: #163a2e;
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--ink); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.2; letter-spacing: -.01em; }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Demo bar shown at the top of every project */
+.demo-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--ink); color: var(--bg); font-size: .82rem;
+}
+.demo-bar a { color: inherit; text-decoration: none; font-weight: 600; }
+.demo-bar .pill { font-family: var(--mono); font-size: .7rem; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.14); }
+.demo-bar .spacer { flex: 1; }
+@media (prefers-color-scheme: dark) { .demo-bar { background: #000; color: #e6ece8; } }
+
+/* App header */
+.app-head { padding: 22px 16px 8px; max-width: 1200px; margin: 0 auto; }
+.app-head .co { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.app-head h1 { font-size: clamp(1.5rem, 3vw, 2rem); margin-top: 4px; }
+.app-head p { color: var(--ink-soft); max-width: 70ch; margin-top: 6px; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 16px 48px; }
+
+/* Building blocks */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: 999px; border: 1.5px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; text-decoration: none; }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn.small { padding: 5px 12px; font-size: .85rem; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input, select, textarea { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+label { font-size: .82rem; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 4px; }
+.chip { display: inline-block; font-family: var(--mono); font-size: .72rem; padding: 2px 9px; border-radius: 999px; background: var(--bg-2); color: var(--ink-soft); }
+.chip.good { background: var(--good-soft); color: var(--good); }
+.chip.warn { background: var(--warn-soft); color: var(--warn); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.muted { color: var(--ink-soft); }
+.mono { font-family: var(--mono); }
+.row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.grid { display: grid; gap: 16px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: .92rem; }
+th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); font-weight: 600; }
+
+/* Footer note */
+.demo-foot { max-width: 1200px; margin: 0 auto; padding: 16px; color: var(--ink-soft); font-size: .82rem; border-top: 1px solid var(--line); }

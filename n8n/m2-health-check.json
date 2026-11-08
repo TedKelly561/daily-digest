@@ -1,0 +1,659 @@
+{
+  "name": "M2 · Summit health check + daily digest",
+  "nodes": [
+    {
+      "id": "a1f0c6d2-0001-4c1e-9a11-000000000001",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a1f0c6d2-0002-4c1e-9a11-000000000002",
+      "name": "Read automations list",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Automations"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "Google Sheets (Summit ops)"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0003-4c1e-9a11-000000000003",
+      "name": "Read automation log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Automation Log"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "Google Sheets (Summit ops)"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0004-4c1e-9a11-000000000004",
+      "name": "Compute health + heartbeat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Health + heartbeat check. Runs every 15 minutes.\n// Input: rows from \"Automations\" (Name, Every Minutes, Active From, Active To, Mode)\n//        and \"Automation Log\" (Timestamp, Automation, Result, Attempt, Items, Error, Note).\n// Output: one item with { hasProblems, problems[], message }.\n// Static data remembers what we already alerted on, so a person gets ONE text per problem,\n// not one every 15 minutes.\n\nconst GRACE_MIN = 5;\nconst now = new Date();\nconst automations = $('Read automations list').all().map(i => i.json);\nconst log = $('Read automation log').all().map(i => i.json);\nconst seen = $getWorkflowStaticData('global');\nseen.alerted = seen.alerted || {};\n\nconst mins = v => { const [h, m] = String(v || '0:0').split(':').map(Number); return h * 60 + (m || 0); };\nfunction lastExpected(a) {\n  const every = Number(a['Every Minutes']);\n  if (!every) return null;\n  const t = new Date(now.getTime() - GRACE_MIN * 60000);\n  const m = t.getHours() * 60 + t.getMinutes();\n  const from = mins(a['Active From'] || '00:00'), to = mins(a['Active To'] || '23:59');\n  if (m < from) return null;\n  const slot = Math.min(to, from + Math.floor((m - from) / every) * every);\n  const d = new Date(t); d.setHours(0, slot, 0, 0);\n  return d;\n}\n\nconst problems = [];\nfor (const a of automations) {\n  const mode = String(a.Mode || 'live').toLowerCase();\n  if (mode === 'paused' || mode === 'shadow') continue;     // paused: not checked; shadow: logging only\n  const runs = log.filter(r => r.Automation === a.Name).sort((x, y) => new Date(x.Timestamp) - new Date(y.Timestamp));\n  const last = runs[runs.length - 1];\n  const lastAt = last ? new Date(last.Timestamp) : null;\n\n  // 1) Retries exhausted (attempt 4 = 1 run + 3 retries)\n  if (last && last.Result === 'failed' && Number(last.Attempt) >= 4) {\n    problems.push({ key: a.Name + '|failed|' + last.Timestamp, automation: a.Name, kind: 'failed',\n      text: a.Name + ' failed after 3 retries: ' + last.Error + '. Held items stay queued until the next good run.' });\n    continue;\n  }\n  // 2) Heartbeat: should have run by now but didn't (silent stop)\n  const expected = lastExpected(a);\n  if (expected && (!lastAt || lastAt < expected)) {\n    problems.push({ key: a.Name + '|late|' + (lastAt ? lastAt.toISOString() : 'never'), automation: a.Name, kind: 'late',\n      text: a.Name + ': no run since ' + (lastAt ? lastAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'ever') +\n            ', expected every ' + a['Every Minutes'] + ' min.' });\n  }\n}\n\nconst fresh = problems.filter(p => !seen.alerted[p.key]);\nfresh.forEach(p => { seen.alerted[p.key] = now.toISOString(); });\n// Forget alerts older than 3 days so static data stays small\nfor (const [k, t] of Object.entries(seen.alerted)) if (now - new Date(t) > 3 * 864e5) delete seen.alerted[k];\n\nreturn [{ json: {\n  checkedAt: now.toISOString(),\n  hasProblems: fresh.length > 0,\n  problems: fresh,\n  stillOpen: problems.length,\n  message: fresh.map(p => '- ' + p.text).join('\\n'),\n} }];"
+      }
+    },
+    {
+      "id": "a1f0c6d2-0005-4c1e-9a11-000000000005",
+      "name": "Any new problems?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.hasProblems }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c6d2-0006-4c1e-9a11-000000000006",
+      "name": "Email the office",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        -120
+      ],
+      "parameters": {
+        "fromEmail": "ops-bot@example.com",
+        "toEmail": "office@example.com, ted@example.com",
+        "subject": "=[Action needed] {{ $json.problems.length }} automation problem(s) at Summit",
+        "emailFormat": "text",
+        "text": "={{ $json.message }}\n\nNothing has been dropped: failed items stay held and are re-processed on the next good run.\nOpen the run log for full context.",
+        "options": {}
+      },
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE",
+          "name": "SMTP (ops-bot@example.com)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0007-4c1e-9a11-000000000007",
+      "name": "Post to Slack #ops-alerts",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        60
+      ],
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "#ops-alerts"
+        },
+        "text": "=*Summit automations need a person:*\n{{ $json.message }}",
+        "otherOptions": {}
+      },
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE",
+          "name": "Slack (Summit)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0008-4c1e-9a11-000000000008",
+      "name": "All healthy",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        220
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a1f0c6d2-0009-4c1e-9a11-000000000009",
+      "name": "Every day at 6:30 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        520
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 6 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a1f0c6d2-0010-4c1e-9a11-000000000010",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        520
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "shadowMode",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "s2",
+              "name": "digestTo",
+              "value": "owner@example.com, office@example.com",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c6d2-0011-4c1e-9a11-000000000011",
+      "name": "Read jobs",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        520
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Jobs"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "Google Sheets (Summit ops)"
+        }
+      },
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0012-4c1e-9a11-000000000012",
+      "name": "Read run log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        520
+      ],
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Automation Log"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "Google Sheets (Summit ops)"
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0013-4c1e-9a11-000000000013",
+      "name": "Build daily digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        520
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Builds the 6:30 AM digest from the Jobs sheet and the last 24 h of the run log.\nconst FIRST_CALL_HOURS = { 'Northstar Home Warranty': 24, 'Bluepeak Protection Plans': 48, 'Harbor Appliance Care': 24, 'Direct customer': 4 };\nconst DONE = ['completed', 'invoiced', 'cancelled'];\nconst now = new Date();\nconst jobs = $('Read jobs').all().map(i => i.json);\nconst log = $('Read run log').all().map(i => i.json).filter(r => now - new Date(r.Timestamp) < 864e5);\nconst esc = s => String(s ?? '').replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));\n\nconst overdue = jobs\n  .filter(j => !DONE.includes(String(j.Status).toLowerCase()) && !j['First Call At'])\n  .map(j => ({ ...j, due: new Date(new Date(j['Created At']).getTime() + (FIRST_CALL_HOURS[j.Vendor] || 24) * 36e5) }))\n  .filter(j => j.due < now)\n  .sort((a, b) => a.due - b.due);\n\nconst names = [...new Set(log.map(r => r.Automation))].sort();\nconst health = names.map(n => {\n  const rs = log.filter(r => r.Automation === n);\n  const failed = rs.filter(r => r.Result === 'failed').length;\n  const recovered = rs.filter(r => r.Result === 'recovered').length;\n  const last = rs[rs.length - 1];\n  const status = last && last.Result === 'failed' && Number(last.Attempt) >= 4 ? 'FAILED' : 'OK';\n  return { n, status, line: rs.length + ' runs, ' + failed + ' failed attempts, ' + recovered + ' fixed on retry' };\n});\nconst problems = health.filter(h => h.status !== 'OK').length;\nconst headline = problems ? problems + ' automation' + (problems > 1 ? 's need' : ' needs') + ' attention' : 'All systems normal';\nconst subject = 'Summit daily digest · ' + now.toDateString() + ' · ' + headline + (overdue.length ? ' · ' + overdue.length + ' overdue first calls' : '');\n\nconst row = (l, r) => '<tr><td style=\"padding:8px 0;border-top:1px solid #e6e9e3;font:14px Arial,sans-serif;\">' + l + '</td><td style=\"padding:8px 0;border-top:1px solid #e6e9e3;font:13px Arial,sans-serif;color:#55605b;text-align:right;\">' + r + '</td></tr>';\nconst html = '<div style=\"background:#eceee8;padding:16px 8px;\"><div style=\"max-width:600px;margin:auto;background:#fff;border-radius:12px;padding:22px 26px;font-family:Arial,sans-serif;\">'\n  + '<div style=\"font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#0f7a5c;font-weight:bold;\">Summit Home Services · Daily digest</div>'\n  + '<h1 style=\"font-size:20px;color:' + (problems ? '#a1281c' : '#0f6b51') + ';\">' + esc(headline) + '</h1>'\n  + '<h2 style=\"font-size:15px;\">Overdue first calls (' + overdue.length + ')</h2><table width=\"100%\" cellspacing=\"0\">'\n  + overdue.map(j => row('<b>' + esc(j['Job ID']) + '</b> ' + esc(j.Customer) + ' · ' + esc(j.Vendor), Math.round((now - j.due) / 36e5) + ' h late')).join('')\n  + '</table><h2 style=\"font-size:15px;\">Automation health, last 24 h</h2><table width=\"100%\" cellspacing=\"0\">'\n  + health.map(h => row('<b>' + esc(h.n) + '</b><br><span style=\"color:#55605b;font-size:13px;\">' + esc(h.line) + '</span>', h.status)).join('')\n  + '</table><p style=\"font-size:12px;color:#6b7570;\">Sent by Summit Ops Bot. If this has not arrived by 7:00 AM, Ted gets a text.</p></div></div>';\nconst text = [subject, '', 'OVERDUE FIRST CALLS', ...overdue.map(j => '* ' + j['Job ID'] + ' ' + j.Customer + ' (' + j.Vendor + ')'), '', 'AUTOMATION HEALTH', ...health.map(h => '[' + h.status + '] ' + h.n + ': ' + h.line)].join('\\n');\n\nreturn [{ json: { subject, html, text, overdue: overdue.length, problems } }];"
+      }
+    },
+    {
+      "id": "a1f0c6d2-0014-4c1e-9a11-000000000014",
+      "name": "Shadow mode?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $('Settings').first().json.shadowMode }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1f0c6d2-0015-4c1e-9a11-000000000015",
+      "name": "Log only (shadow)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Shadow mode: the digest is built but not sent. Check the execution data, then set shadowMode to false.\nconsole.log('[SHADOW] ' + $json.subject + '\\n' + $json.text);\nreturn { json: { result: 'shadow', note: 'Digest built, not sent (shadow mode)', subject: $json.subject } };"
+      }
+    },
+    {
+      "id": "a1f0c6d2-0016-4c1e-9a11-000000000016",
+      "name": "Send digest email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        620
+      ],
+      "parameters": {
+        "fromEmail": "ops-bot@example.com",
+        "toEmail": "={{ $('Settings').first().json.digestTo }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $json.text }}",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE",
+          "name": "SMTP (ops-bot@example.com)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0017-4c1e-9a11-000000000017",
+      "name": "Write run to log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1580,
+        520
+      ],
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "https://docs.google.com/spreadsheets/d/REPLACE_WITH_YOUR_SHEET_ID/edit"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Automation Log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $now.toISO() }}",
+            "Automation": "Daily digest",
+            "Result": "={{ $json.result || 'ok' }}",
+            "Attempt": "1",
+            "Items": "0",
+            "Note": "={{ $json.note || 'Digest sent' }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE",
+          "name": "Google Sheets (Summit ops)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "a1f0c6d2-0018-4c1e-9a11-000000000018",
+      "name": "Note: safety rules",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        -340
+      ],
+      "parameters": {
+        "width": 640,
+        "height": 300,
+        "content": "## M2 Health check + daily digest\n\n**Top branch** (every 15 min): reads the Automations list and the run log, flags any automation whose retries ran out or that missed its expected run (heartbeat), and alerts a person by email + Slack. Static data stops repeat texts for the same problem.\n\n**Bottom branch** (6:30 AM): builds the daily digest. `shadowMode` in **Settings** logs instead of sending.\n\n**Every node** that talks to Google, SMTP or Slack retries 3 times, 5 s apart.\n\n**Error workflow:** set Settings → Error workflow to your \"Fail to a person\" workflow (an Error Trigger that texts Ted). If this workflow itself crashes, someone still hears about it."
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Read automations list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read automations list": {
+      "main": [
+        [
+          {
+            "node": "Read automation log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read automation log": {
+      "main": [
+        [
+          {
+            "node": "Compute health + heartbeat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute health + heartbeat": {
+      "main": [
+        [
+          {
+            "node": "Any new problems?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any new problems?": {
+      "main": [
+        [
+          {
+            "node": "Email the office",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Post to Slack #ops-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All healthy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every day at 6:30 AM": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Read jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read jobs": {
+      "main": [
+        [
+          {
+            "node": "Read run log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read run log": {
+      "main": [
+        [
+          {
+            "node": "Build daily digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build daily digest": {
+      "main": [
+        [
+          {
+            "node": "Shadow mode?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shadow mode?": {
+      "main": [
+        [
+          {
+            "node": "Log only (shadow)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send digest email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log only (shadow)": {
+      "main": [
+        [
+          {
+            "node": "Write run to log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send digest email": {
+      "main": [
+        [
+          {
+            "node": "Write run to log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Denver",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "errorWorkflow": "REPLACE_WITH_ERROR_WORKFLOW_ID"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [
+    {
+      "name": "summit-demo"
+    },
+    {
+      "name": "M2"
+    }
+  ]
+}

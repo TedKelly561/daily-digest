@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Digest · Ted Kelly</title>
+<meta name="description" content="Health checks and a 6:30 AM daily digest for a service business's automations: every run logged, retries with backoff, alerts to a person, heartbeat checks and shadow mode.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/demo.css">
+<link rel="stylesheet" href="app.css">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<div class="demo-bar"><a href="https://tedkelly.dev/">← Ted Kelly</a><span class="pill">DEMO</span><span>Fictional company & data</span><span class="spacer"></span><a href="https://github.com/TedKelly561/daily-digest">View code</a></div>
+
+<header class="app-head hero">
+  <div class="co">Summit Home Services · Automation ops</div>
+  <h1>Know every morning that your automations ran, and what needs you.</h1>
+  <p>Every automation logs every run, retries on its own when something hiccups, and texts a person when it can't recover. At 6:30 every morning the owner gets one email: what ran, what broke, and which jobs need someone.</p>
+</header>
+
+<div class="wrap wide">
+  <section class="card statusbar" id="statusbar" aria-labelledby="sbHead">
+    <div class="sb-main">
+      <span class="sb-icon" id="sbIcon" aria-hidden="true">✓</span>
+      <div>
+        <h2 id="sbHead">Checking…</h2>
+        <p id="sbSub"></p>
+      </div>
+    </div>
+    <div class="sb-side">
+      <dl class="sb-stats" id="sbStats"></dl>
+      <div class="clock" aria-live="off">Demo clock<b id="clock">9:42 AM</b>sped up</div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <section class="card live" id="live" aria-labelledby="liveTitle">
+      <div class="sec-head">
+        <h2 id="liveTitle">When something breaks</h2>
+        <span class="spacer"></span>
+        <span class="muted small">Time is sped up: 1 minute takes about a second</span>
+      </div>
+      <p class="sec-intro">A run fails, then retries on its own with longer waits each time. It either recovers, or it texts a person with the error, what's held and a suggested fix. Work is held, never dropped.</p>
+      <ol class="steps" id="steps" aria-label="Retry timeline">
+        <li data-step="0"><b>Run</b><small>on schedule</small></li>
+        <li data-step="1"><b>Retry 1</b><small>after 1 min</small></li>
+        <li data-step="2"><b>Retry 2</b><small>after 5 min</small></li>
+        <li data-step="3"><b>Retry 3</b><small>after 15 min</small></li>
+        <li data-step="4"><b id="outcomeLabel">Outcome</b><small id="outcomeSub">recover or alert</small></li>
+      </ol>
+      <div class="live-msg" id="liveMsg" role="status" aria-live="polite"><span class="lm-time" id="liveTime"></span><span id="liveText">Ready.</span></div>
+      <div class="progress" aria-hidden="true"><span id="progressBar"></span></div>
+      <div class="held-box" id="heldBox"></div>
+      <div class="live-controls">
+        <button class="btn small" id="replayBtn" type="button">Replay</button>
+        <form class="sim" id="simForm">
+          <div class="field">
+            <label for="simAuto">Automation</label>
+            <select id="simAuto"></select>
+          </div>
+          <div class="field">
+            <label for="simOutcome">What happens</label>
+            <select id="simOutcome">
+              <option value="recover">Recovers on retry 2</option>
+              <option value="exhaust">Retries run out, alert a person</option>
+            </select>
+          </div>
+          <button class="btn ghost small" id="simBtn" type="submit">Simulate a failure</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="alerts-wrap" id="alerts" aria-labelledby="alertsTitle">
+      <div class="alerts-head"><h2 id="alertsTitle">Alerts</h2><span class="muted small" id="alertsCount"></span></div>
+      <div id="alertList" class="alerts-wrap"></div>
+    </section>
+
+    <aside class="digest-col" id="digest" aria-labelledby="digestTitle">
+      <div class="digest-head">
+        <h2 id="digestTitle">The 6:30 AM daily digest</h2>
+        <p>What the owner reads with coffee, no login needed. It's built from the jobs sheet and the run log above.</p>
+      </div>
+      <div class="digest-tools">
+        <div class="seg" role="group" aria-label="Which digest">
+          <button type="button" data-edition="morning" aria-pressed="true">This morning, 6:30</button>
+          <button type="button" data-edition="now" aria-pressed="false">If sent now</button>
+        </div>
+        <button class="btn ghost small" id="plainBtn" type="button" aria-pressed="false">View as plain text</button>
+        <button class="btn ghost small" id="copyBtn" type="button">Copy HTML</button>
+      </div>
+      <div class="mail" id="mail">
+        <div class="mail-head">
+          <div class="mail-subject" id="mailSubject"></div>
+          <div class="mail-from">
+            <span class="avatar" aria-hidden="true">S</span>
+            <div class="who"><b>Summit Ops Bot</b> <span>&lt;ops-bot@summit-home.example&gt;</span>
+              <div class="to">to owner@summit-home.example, office@summit-home.example</div></div>
+            <time id="mailTime">6:30 AM</time>
+          </div>
+        </div>
+        <div class="mail-body">
+          <iframe id="mailFrame" title="Daily digest email preview" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" loading="eager"></iframe>
+          <pre id="mailText" hidden tabindex="0" aria-label="Plain text version of the digest"></pre>
+        </div>
+      </div>
+      <p class="edition-note" id="editionNote"></p>
+    </aside>
+
+    <section class="card" id="autos" aria-labelledby="autosTitle">
+      <div class="sec-head">
+        <h2 id="autosTitle">Automations</h2>
+        <span class="spacer"></span>
+        <span class="muted small" id="autosSummary"></span>
+      </div>
+      <p class="sec-intro">Each bar is one day of the last 14. Amber means a retry fixed it, red means a person had to step in.</p>
+      <div class="auto-list" id="autoList"></div>
+    </section>
+
+    <section class="card" id="heartbeats" aria-labelledby="hbTitle">
+      <div class="sec-head"><h2 id="hbTitle">Heartbeat checks</h2></div>
+      <p class="sec-intro">A separate watchdog checks that each automation actually ran when it should. An automation that stops quietly gets caught within 5 minutes, even when nothing errored.</p>
+      <table class="hb-table">
+        <thead><tr><th scope="col">Automation</th><th scope="col">Expected</th><th scope="col">Last run</th><th scope="col">Check</th></tr></thead>
+        <tbody id="hbBody"></tbody>
+      </table>
+      <p class="hb-note">The watchdog runs on n8n, and a small Apps Script checks the watchdog itself, so the checker can't stop quietly either.</p>
+    </section>
+
+    <section class="card" id="log" aria-labelledby="logTitle">
+      <div class="sec-head"><h2 id="logTitle">Run log</h2></div>
+      <p class="sec-intro">Every run, retry and check is written down, including the boring ones. If it isn't in the log, it didn't happen.</p>
+      <div class="log-filters">
+        <div class="field">
+          <label for="logAuto">Automation</label>
+          <select id="logAuto"><option value="all">All automations</option></select>
+        </div>
+        <div class="field">
+          <label for="logResult">Result</label>
+          <select id="logResult">
+            <option value="work">Runs that did something</option>
+            <option value="all">Every run, including idle ones</option>
+            <option value="problems">Problems only</option>
+            <option value="retries">Retries</option>
+            <option value="ok">Successful</option>
+            <option value="shadow">Shadow mode</option>
+            <option value="checks">Checks and alerts</option>
+          </select>
+        </div>
+        <span class="log-count" id="logCount" aria-live="polite"></span>
+      </div>
+      <div class="log-scroll">
+        <table class="log-table">
+          <thead><tr><th scope="col">Time</th><th scope="col">Automation</th><th scope="col">Result</th><th scope="col" class="n">Items</th><th scope="col" class="n">Took</th><th scope="col">Details</th></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+      <button class="btn ghost small log-more" id="logMore" type="button">Show 40 more</button>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<footer class="demo-foot">Summit Home Services, its techs, customers, warranty companies, suppliers and claim numbers are fictional. The clock and every run are simulated in your browser. Built by Ted Kelly.</footer>
+
+<script src="shared/data.js"></script>
+<script src="ops.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
