@@ -4,11 +4,12 @@
 // Dates are generated relative to "today" so the demos always look current.
 
 (function () {
-  const DAY = 86400000;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const d = (offsetDays, hour = 9, minute = 0) => {
-    const t = new Date(today.getTime() + offsetDays * DAY);
+    // Step by calendar days, not 24 h blocks, so DST changes can't shift the date.
+    const t = new Date(today);
+    t.setDate(t.getDate() + offsetDays);
     t.setHours(hour, minute, 0, 0);
     return t.toISOString();
   };

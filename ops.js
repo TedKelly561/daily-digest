@@ -1,6 +1,6 @@
 // Daily Digest demo: the automation-ops engine.
 // Pure state + functions (window.Ops). No DOM here, so it can be tested in Node:
-//   global.window = global; require('shared/data.js'); const Ops = require('./ops.js');
+//   global.window = global; require('../shared/data.js'); const Ops = require('./ops.js');
 //
 // Model: every automation writes one log entry per run (and per retry). Everything
 // else, status, heartbeat checks, the alert list and the morning digest, is derived
@@ -405,7 +405,7 @@
     const unassigned = S.jobs.filter(j => j.status === 'new' && !j.techId && +new Date(j.createdAt) <= asOf).length;
 
     // Yesterday in numbers
-    const yA = dayA - DAY + 0, yB = dayA;
+    const yA = dayStart(dayA - 1), yB = dayA;               // calendar day, safe across DST
     const inY = iso => iso && +new Date(iso) >= yA && +new Date(iso) < yB;
     const yLog = st.log.filter(e => e.ts >= yA && e.ts < yB && !NOTICE[e.kind]);
     const completedY = S.jobs.filter(j => inY(j.completedAt));

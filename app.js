@@ -75,7 +75,7 @@
     const max = Math.max(1, ...data.filter(Boolean).map(x => x.items));
     const bars = data.map((x, i) => {
       const xPos = i * (W + G);
-      const label = x ? `${x.day === 0 ? 'Today so far' : x.day === -1 ? 'Yesterday' : (-x.day) + ' days ago'}: ${x.runs} runs, ${x.items.toLocaleString('en-US')} ${d.noun[1]}${x.issue === 'retry' ? ', recovered on retry' : x.issue === 'failed' ? ', failed, a person stepped in' : ''}` : 'Not running yet';
+      const label = x ? `${x.day === 0 ? 'Today so far' : x.day === -1 ? 'Yesterday' : (-x.day) + ' days ago'}: ${O.plural(x.runs, ['run', 'runs'])}, ${O.plural(x.items, d.noun)}${x.issue === 'retry' ? ', recovered on retry' : x.issue === 'failed' ? ', failed, a person stepped in' : ''}` : 'Not running yet';
       if (!x) return `<line class="none" x1="${xPos}" x2="${xPos + W}" y1="${H - 1}" y2="${H - 1}"><title>${label}</title></line>`;
       const h = Math.max(3, Math.round((x.items / max) * (H - 2)));
       const cls = 'b' + (x.issue ? ' ' + x.issue : '') + (x.day === 0 ? ' today' : '');
