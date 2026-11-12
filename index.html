@@ -14,7 +14,7 @@
 </head>
 <body>
 
-<div class="demo-bar"><a href="https://tedkelly.dev/">← Ted Kelly</a><span class="pill">DEMO</span><span>Fictional company & data</span><span class="spacer"></span><a href="https://github.com/TedKelly561/daily-digest">View code</a></div>
+<nav class="demo-bar" aria-label="Demo"><a href="https://tedkelly.dev/">← Ted Kelly</a><span class="pill">DEMO</span><span>Fictional company & data</span><span class="spacer"></span><a href="https://github.com/TedKelly561/daily-digest">View code</a></nav>
 
 <header class="app-head hero">
   <div class="co">Summit Home Services · Automation ops</div>
@@ -22,6 +22,7 @@
   <p>Every automation logs every run, retries on its own when something hiccups, and texts a person when it can't recover. At 6:30 every morning the owner gets one email: what ran, what broke, and which jobs need someone.</p>
 </header>
 
+<main id="main">
 <div class="wrap wide">
   <section class="card statusbar" id="statusbar" aria-labelledby="sbHead">
     <div class="sb-main">
@@ -152,7 +153,7 @@
         </div>
         <span class="log-count" id="logCount" aria-live="polite"></span>
       </div>
-      <div class="log-scroll">
+      <div class="log-scroll" tabindex="0" role="region" aria-label="Run log, scrollable">
         <table class="log-table">
           <thead><tr><th scope="col">Time</th><th scope="col">Automation</th><th scope="col">Result</th><th scope="col" class="n">Items</th><th scope="col" class="n">Took</th><th scope="col">Details</th></tr></thead>
           <tbody id="logBody"></tbody>
@@ -162,6 +163,7 @@
     </section>
   </div>
 </div>
+</main>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
